@@ -16,11 +16,9 @@ fn main() -> std::io::Result<()> {
     } else {
         panic!("File too short")
     }
-    get_email_ranges(&file)
-        .into_iter()
-        .for_each(|(range, _hash)| {
-            println!("{}", u64_to_hex(range.start as _, &mut Default::default()));
-        });
+    get_email_ranges(&file).for_each(|(range, _hash)| {
+        println!("{}", u64_to_hex(range.start as _, &mut Default::default()));
+    });
     Ok(())
 }
 const FROM: &[u8; 5] = b"From ";
@@ -42,29 +40,49 @@ fn hash(content: &[u8]) -> u64 {
     hasher.finish()
 }
 
-fn get_email_ranges(file: &memmap::Mmap) -> Vec<(std::ops::Range<usize>, u64)> {
-    // This could be made into an iterator with some effort...
-    let mut ranges = vec![];
-    let mut start: usize = file.iter().position(|&chr| chr == b'\n').unwrap() + 1;
+fn get_email_ranges<'a>(
+    file: &'a memmap::Mmap,
+) -> impl Iterator<Item = (std::ops::Range<usize>, u64)> + 'a {
+    use std::cell::Cell;
+    use std::rc::Rc;
+    let start: Rc<Cell<usize>> = Rc::new(Cell::new(
+        file.iter().position(|&chr| chr == b'\n').unwrap() + 1,
+    ));
 
-    while let Some(pos) = file[start..]
-        .iter()
-        .enumerate()
-        .find_map(|(mut pos, &chr)| {
-            pos += start + 1;
-            let test = chr == b'\n' && file.get(pos..)?.starts_with(FROM);
-            Some(pos).filter(|_| test)
-        })
-    {
-        ranges.push((start..pos, hash(&file[start..pos])));
-        start = pos
-            + file[pos..]
+    std::iter::from_fn({
+        let start = start.clone();
+        move || {
+            file[start.get()..]
                 .iter()
-                .position(|&chr| chr == b'\n')
-                .unwrap_or(0)
-            + 1;
-    }
-    ranges.push((start..file.len(), hash(&file[start..file.len()])));
-
-    ranges
+                .enumerate()
+                .find_map(|(mut pos, &chr)| {
+                    pos += start.get() + 1;
+                    let test = chr == b'\n' && file.get(pos..)?.starts_with(FROM);
+                    Some(pos).filter(|_| test)
+                })
+                .map(|pos| {
+                    let ret = (start.get()..pos, hash(&file[start.get()..pos]));
+                    start.set(
+                        pos + file[pos..]
+                            .iter()
+                            .position(|&chr| chr == b'\n')
+                            .unwrap_or(0)
+                            + 1,
+                    );
+                    ret
+                })
+        }
+    })
+    .chain(
+        std::iter::from_fn({
+            let start = start.clone();
+            move || {
+                Some((
+                    start.get()..file.len(),
+                    hash(&file[start.get()..file.len()]),
+                ))
+            }
+        })
+        .take(1),
+    )
 }
