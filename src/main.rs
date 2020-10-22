@@ -32,7 +32,7 @@ fn u64_to_hex(u: u64, hex: &mut [u8; 8 * 2]) -> &str {
         *elem = ((u >> (i * 8)) & 255) as u8;
     }
     hex::encode_to_slice(&bytes, hex).expect("hex is twice as large as bytes");
-    let start = hex.iter().position(|&x| x != b'0').unwrap_or(0) & !0b11;
+    let start = hex.chunks(4).position(|x| x != b"0000").unwrap_or(0) * 4;
     std::str::from_utf8(&hex[start..]).unwrap()
 }
 
