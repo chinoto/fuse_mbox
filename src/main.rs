@@ -1,10 +1,14 @@
+use std::fs::File;
+use std::hash::Hasher;
+
+const FROM: &[u8; 5] = b"From ";
+
 fn main() -> std::io::Result<()> {
     assert!(
         std::mem::size_of::<usize>() <= 8,
         "Assumption broken: usize greater than 8 bytes"
     );
     let mbox_path = std::env::args_os().nth(1).expect("Mbox not provided");
-    use std::fs::File;
     let file = unsafe { memmap::Mmap::map(&File::open(mbox_path)?)? };
     if let Some(window) = file.get(0..FROM.len()) {
         if window != FROM {
@@ -21,7 +25,6 @@ fn main() -> std::io::Result<()> {
     });
     Ok(())
 }
-const FROM: &[u8; 5] = b"From ";
 
 fn u64_to_hex(u: u64, hex: &mut [u8; 8 * 2]) -> &str {
     let mut bytes: [u8; 8] = Default::default();
@@ -34,7 +37,6 @@ fn u64_to_hex(u: u64, hex: &mut [u8; 8 * 2]) -> &str {
 }
 
 fn hash(content: &[u8]) -> u64 {
-    use std::hash::Hasher;
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     hasher.write(content);
     hasher.finish()
